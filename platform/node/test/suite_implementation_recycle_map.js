@@ -10,42 +10,19 @@ mbgl.on('message', function(msg) {
     console.log('%s (%s): %s', msg.severity, msg.class, msg.text);
 });
 
-var map;
+// Map of map objects by pixel ratio
+var maps = new Map();
 
 module.exports = function (style, options, callback) {
-    if (typeof map === 'undefined') {
-        map = new mbgl.Map({
+    if (!maps.has(options.pixelRatio)) {
+        maps.set(options.pixelRatio, mbgl.Map({
             ratio: options.pixelRatio,
-            request: function(req, callback) {
-                request(req.url, {encoding: null}, function (err, response, body) {
-                    if (err) {
-                        callback(err);
-                    } else if (response.statusCode == 404) {
-                        callback();
-                    } else if (response.statusCode != 200) {
-                        callback(new Error(response.statusMessage));
-                    } else {
-                        callback(null, {data: body});
-                    }
-                });
-            }
-        });
-    } else {
-        map.ratio = options.pixelRatio;
-        map.request = function(req, callback) {
-            request(req.url, {encoding: null}, function (err, response, body) {
-                if (err) {
-                    callback(err);
-                } else if (response.statusCode == 404) {
-                    callback();
-                } else if (response.statusCode != 200) {
-                    callback(new Error(response.statusMessage));
-                } else {
-                    callback(null, {data: body});
-                }
-            });
-        };
+            request: mapRequest
+        }));
     }
+
+    let map = maps.get(options.pixelRatio);
+    map.request = mapRequest;
 
     var timedOut = false;
     var watchdog = setTimeout(function () {
@@ -77,6 +54,20 @@ module.exports = function (style, options, callback) {
             callback(err, pixels, results.map(prepareFeatures));
         });
     });
+
+    function mapRequest(req, callback) {
+        request(req.url, {encoding: null}, function (err, response, body) {
+            if (err) {
+                callback(err);
+            } else if (response.statusCode == 404) {
+                callback();
+            } else if (response.statusCode != 200) {
+                callback(new Error(response.statusMessage));
+            } else {
+                callback(null, {data: body});
+            }
+        });
+    };
 
     function applyOperations(operations, callback) {
         var operation = operations && operations[0];
